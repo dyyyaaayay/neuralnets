@@ -2,7 +2,7 @@
 import argparse
 import os
 import zipfile
-import shutil
+import shutil 
 from urllib.request import urlretrieve
 
 import tensorflow as tf
