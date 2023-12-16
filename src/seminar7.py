@@ -12,17 +12,18 @@ import boto3
 import dotenv
 import pandas as pd
 import tensorflow as tf
+from keras.layers import SimpleRNN, Activation, Dense, Dropout, Input, Embedding, LSTM
 
 MAX_WORDS = 1000
 MAX_SEQ_LEN = 150
 DATA_URL_TRAIN = 'https://storage.yandexcloud.net/fa-bucket/spam.csv'
 DATA_URL_TEST = 'https://storage.yandexcloud.net/fa-bucket/spam_test.csv'
-PATH_TO_TRAIN_DATA = 'data/raw/spam.csv'
-PATH_TO_TEST_DATA = 'data/raw/spam_test.csv'
+PATH_TO_TRAIN_DATA = '../data/raw/spam.csv'
+PATH_TO_TEST_DATA = '../data/raw/spam_test.csv'
 PATH_TO_MODEL = 'models/model_7'
 BUCKET_NAME = 'neuralnets2023'
 # todo fix your git user name
-YOUR_GIT_USER = 'labintsev'
+YOUR_GIT_USER = 'dyyyaaayay'
 
 
 def download_data():
@@ -42,15 +43,18 @@ def make_model():
     :return:
     """
     inputs = tf.keras.layers.Input(name='inputs', shape=[MAX_SEQ_LEN])
-    x = tf.keras.layers.Embedding(MAX_WORDS, output_dim=4, input_length=MAX_SEQ_LEN)(inputs)
+    x = tf.keras.layers.Embedding(MAX_WORDS, output_dim=50, input_length=MAX_SEQ_LEN)(inputs)
     x = tf.keras.layers.SimpleRNN(units=4)(x)
+    x = Dense(256, name='FC1', activation='relu')(x)
+    x = Activation('relu')(x)
+    x = Dropout(0.5)(x)
     x = tf.keras.layers.Dense(1, name='out_layer')(x)
     x = tf.keras.layers.Activation('sigmoid')(x)
     recurrent_model = tf.keras.Model(inputs=inputs, outputs=x)
     return recurrent_model
 
 
-def load_data(csv_path='data/raw/spam.csv') -> tuple:
+def load_data(csv_path='../data/raw/spam.csv') -> tuple:
     df = pd.read_csv(csv_path)
     X = df.x.astype('str')
     Y = df.y.astype('int')
@@ -66,29 +70,28 @@ def train():
 
     model = make_model()
     model.summary()
-    model.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy', tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
-    model.fit(sequences_matrix, Y_train, batch_size=128, epochs=10, validation_split=0.2)
+    model.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy', tf.keras.metrics.Precision()])
+    model.fit(sequences_matrix, Y_train, batch_size=256, epochs=15, validation_split=0.2)
     model.save('models/model_7')
+    return tok
 
 
-def validate(model_path='models/model_7') -> tuple:
+def validate(model_path='models/model_7', tokenizer=None) -> tuple:
     """
     Validate model on test subset
     todo fit tokenizer on train texts,
-    todo achieve >0.95 accuracy precision recall
+    todo achieve >0.95 both accuracy and precision
     """
     model = tf.keras.models.load_model(model_path)
-    X_test, Y_test = load_data('data/raw/spam_test.csv')
-
-    tok = tf.keras.preprocessing.text.Tokenizer(num_words=MAX_WORDS)
-    tok.fit_on_texts(X_test)
+    X_test, Y_test = load_data('../data/raw/spam_test.csv')
+    tok = tokenizer
     test_sequences = tok.texts_to_sequences(X_test)
     test_sequences_matrix = tf.keras.preprocessing.sequence.pad_sequences(test_sequences, maxlen=MAX_SEQ_LEN)
 
-    loss, accuracy, precision, recall = model.evaluate(test_sequences_matrix, Y_test)
-    print(f'Test set\n  Loss: {loss:0.3f}  Accuracy: {accuracy:0.3f}, Precision: {precision:0.3f}, Recall: {recall:0.3f}')
+    loss, accuracy, precision = model.evaluate(test_sequences_matrix, Y_test)
+    print(f'Test set\n  Loss: {loss:0.3f}  Accuracy: {accuracy:0.3f}, Precision: {precision:0.3f}')
 
-    return accuracy, precision, recall
+    return accuracy, precision
 
 
 def upload():
@@ -108,7 +111,7 @@ def upload():
         aws_access_key_id=ACCESS_KEY,
         aws_secret_access_key=SECRET_KEY
     )
-    client.upload_file(zip_model_path, BUCKET_NAME, f'{YOUR_GIT_USER}/model_7.zip')
+    client.upload_file(zip_model_path, BUCKET_NAME, f'{YOUR_GIT_USER}/model_7_s3.zip')
     print('Upload succeed.')
 
 
@@ -126,6 +129,7 @@ if __name__ == '__main__':
     if args.train:
         train()
     if args.validate:
-        validate()
+        token = train()
+        validate(tokenizer = token)
     if args.upload:
         upload()
