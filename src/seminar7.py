@@ -118,7 +118,7 @@ def upload():
         aws_secret_access_key=SECRET_KEY
     )
     client.upload_file(zip_model_path, BUCKET_NAME, f'{YOUR_GIT_USER}/model_7.zip')
-    print('Upload succeed.')
+    print('Upload succeed. ')
 
 
 if __name__ == '__main__':
